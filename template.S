@@ -2,44 +2,34 @@
 // nLaunch Linux Loader template
 //
 
-#define CMDLINE_MAX	128
+#include "template.h"
+
 #define PHYS_RAM_START	0x10000000
-#define RELOC_LOCATION	(PHYS_RAM_START + 0x400000)
 
-// struct {
-//	uint32_t	reserved; /* Branch instruction */
-//
-// 	uint32_t	magic; /* 'KERN' */
-// 	uint32_t	bin_version; /* version of this template */
-//
-// 	uint32_t	mach_id; /* Machine ID */
-//
-// 	uint32_t	ramdisk_size; /* Size of ramdisk in kernel (in KB) */
-//	uint32_t	initrd_size; /* Size of initrd */
-// 	uint32_t	phys_size; /* Size of physical memory */
-//
-// 	char		cmdline[CMDLINE_MAX];
-// };
+#define KERNEL_RELOC	(PHYS_RAM_START + 0x00400000)
+#define INITRD_RELOC	(PHYS_RAM_START + 0x00800000)
 
-// Struct begin
-
+/* Header begin */
 b main
-
-.ascii "KERN"	/* Magic number */
-.long 0x0	/* Template version */
-
+.long TEMPLATE_MAGIC	/* Magic number */
+.long TEMPLATE_VERSION	/* Template version */
 mach_id:	.long 0
-
 ramdisk_size:	.long 0
 initrd_size:	.long 0
 phys_size:	.long 0
-
 cmdline:	.fill CMDLINE_MAX, 1, 0
+/* Header end */
 
-// Struct end
+/* Static data */
+kernel_magic: 	.long 0x016F2818
+
+//
+// Register allocations:
+//	r0-r9	temporaries
+//	r10-r12	local temporaries
+//
 
 main:
-
 	// Disable interrupts and ensure we are in SVC mode
 
 	mrs r0, cpsr
@@ -47,14 +37,31 @@ main:
 	orr r0, r0, #0xD3
 	msr cpsr, r0
 
-	mov sp, #0x11000000
-
 	// Sanity check
 
 	ldr r0, kernel_start + 0x24
-	ldr r1, zimage_magic
+	ldr r1, kernel_magic
 	cmp r0, r1
 	bne panic
+
+	// Relocate kernel and initrds
+
+	ldr r0, kernel_start + 0x28 /* Start */
+	ldr r1, kernel_start + 0x2C /* End */
+	sub r2, r1, r0 /* Get kernel size */
+
+	mov r0, #KERNEL_RELOC
+	adr r1, kernel_start
+	add r10, r1, r2
+
+	bl memcpy /* Reloc kernel */
+
+	mov r0, #INITRD_RELOC
+	mov r1, r10
+	ldr r2, initrd_size
+	str r2, atag_initrd_size /* Fill it in while we're at it */
+
+	bl memcpy /* Reloc initrd */
 
 	// Start filling ATAGs
 
@@ -67,31 +74,12 @@ main:
 	mov r0, #PHYS_RAM_START
 	str r0, atag_mem_start
 
-	/* Are we allowed to have a initrd size of 0? */
-//	ldr r0, initrd_size
-//	str r0, atag_initrd_size
-
-	/* If there is an initrd, it'll be at the end */
-	ldr r0, kernel_start + 0x28 /* Start */
-	ldr r1, kernel_start + 0x2C /* End */
-	sub r5, r1, r0 /* Get kernel size */
-//	add r0, r5, #RELOC_LOCATION /* initrd start address */
-//	str r0, atag_initrd_start
-
-//	ldr r0, initrd_size
-//	add r5, r5, r0 /* Total image size */
+	mov r0, #INITRD_RELOC
+	str r0, atag_initrd_start
 
 	adr r0, atag_cmdline
 	adr r1, cmdline
 	mov r2, #CMDLINE_MAX
-	bl memcpy
-
-	// Relocate kernel
-
-	mov r0, #RELOC_LOCATION
-	adr r1, kernel_start
-	mov r2, r5 /* Size incl initrd */
-	bkpt #1
 	bl memcpy
 
 	// Boot the kernel
@@ -100,22 +88,25 @@ main:
 	ldr r1, mach_id
 	adr r2, atag_list
 
-	mov pc, #RELOC_LOCATION
+	mov pc, #KERNEL_RELOC
 
 panic:
 	b panic
 
 memcpy: /* r0 = dst, r1 = src, r2 = size */
-	/* Slow and stupid */
-	ldrb r3, [r1]
-	strb r3, [r0]
-	add r0, r0, #1
-	add r1, r1, #1
-	subs r2, r2, #1
-	bne memcpy
+	cmp r2, #0
+	bxeq lr
+	_copy:
+		/* Slow and stupid */
+		ldrb r3, [r1]
+		strb r3, [r0]
+		add r0, r0, #1
+		add r1, r1, #1
+		subs r2, r2, #1
+	bne _copy
 	bx lr
 
-zimage_magic: 	.long 0x016F2818
+/* Start ATAG list */
 
 #define ATAG_NONE       0x00000000
 #define ATAG_CORE       0x54410001
@@ -130,37 +121,37 @@ zimage_magic: 	.long 0x016F2818
 
 atag_list:
 
-// Start list
 .long 2
 .long ATAG_CORE
 
-	// Physical memory
+	/* Physical memory */
 	.long 4
 	.long ATAG_MEM
 		atag_mem_size:		.long 0
 		atag_mem_start:		.long 0
 
-	// Ramdisk
+	/* Ramdisk */
 	.long 5
 	.long ATAG_RAMDISK
 		.long 0 //Flags
 		atag_ramdisk_kbsize:	.long 0
 		.long 0 // Start
 
-/*	// Initrd
+	/* Initrd */
 	.long 4
 	.long ATAG_INITRD2
 		atag_initrd_start:	.long 0
 		atag_initrd_size:	.long 0
-*/
-	// Command line
+
+	/* Command line */
 	.long 2 + ((CMDLINE_MAX + 3) / 4)
 	.long ATAG_CMDLINE
 		atag_cmdline:		.fill CMDLINE_MAX, 1, 0
 
-// End list
 .long 0
 .long ATAG_NONE
 
-//.align 2
+/* End ATAG list */
+
+.align 2
 kernel_start:

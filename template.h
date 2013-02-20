@@ -1,9 +1,13 @@
 #ifndef _TEMPLATE_H
 #define _TEMPLATE_H
 
-#include <stdint.h>
-
 #define CMDLINE_MAX		128
+#define TEMPLATE_VERSION	0x0
+#define TEMPLATE_MAGIC		0x4e52454b
+
+#ifndef __ASSEMBLER__
+
+#include <stdint.h>
 
 struct bin_template {
 	uint32_t	reserved; /* Branch instruction */
@@ -20,7 +24,6 @@ struct bin_template {
 	uint8_t		cmdline[CMDLINE_MAX];
 };
 
-#define TEMPLATE_VERSION	0x0
-#define TEMPLATE_MAGIC		0x4e52454b
+#endif
 
 #endif
