@@ -25,8 +25,8 @@ kernel_magic: 	.long 0x016F2818
 
 //
 // Register allocations:
-//	r0-r9	temporaries
-//	r10-r12	local temporaries
+//	r0-r10	temporaries
+//	r11-r12	local temporaries
 //
 
 main:
@@ -52,12 +52,12 @@ main:
 
 	mov r0, #KERNEL_RELOC
 	adr r1, kernel_start
-	add r10, r1, r2
+	add r11, r1, r2
 
 	bl memcpy /* Reloc kernel */
 
 	mov r0, #INITRD_RELOC
-	mov r1, r10
+	mov r1, r11
 	ldr r2, initrd_size
 	str r2, atag_initrd_size /* Fill it in while we're at it */
 
@@ -97,13 +97,10 @@ memcpy: /* r0 = dst, r1 = src, r2 = size */
 	cmp r2, #0
 	bxeq lr
 	_copy:
-		/* Slow and stupid */
-		ldrb r3, [r1]
-		strb r3, [r0]
-		add r0, r0, #1
-		add r1, r1, #1
-		subs r2, r2, #1
-	bne _copy
+		ldmia r1!, {r3-r10}
+		stmia r0!, {r3-r10}
+		subs r2, r2, #32
+	bgt _copy
 	bx lr
 
 /* Start ATAG list */
