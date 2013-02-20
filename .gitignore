@@ -1,0 +1,8 @@
+.DS_Store
+*.o
+*.bin
+*.img
+*.sh
+*.tnc
+*.elf
+makebin
