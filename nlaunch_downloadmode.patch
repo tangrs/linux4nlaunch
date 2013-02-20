@@ -1,0 +1,28 @@
+--- nlaunch.c	2013-01-01 00:00:00.000000000 +1100
++++ nlaunch.c	2013-02-19 18:03:31.000000000 +1100
+@@ -62,6 +62,8 @@
+ #define boot2_purge_files       ((void(*)(const char*))0x1192ACF4)
+ //! display_msg_to_screen from boot2
+ #define display_msg_to_screen   ((void(*)(char *, int, int))0x11801C94)
++//! download_mode
++#define download_mode   ((void(*)(void))0x118012B8)
+ 
+ // ================================================================================================
+ // Variables
+@@ -238,6 +240,16 @@
+         #if DEBUG
+         display_msg_to_screen(S("2"),0,0);
+         #endif
++    if (~(*(volatile unsigned short*)0x900E001C) & (1<<9))
++    {
++        // download mode if tab is pressed
++        #if DEBUG
++        display_msg_to_screen(S("D"),0,0);
++        #endif
++        download_mode();
++        boot2_HW_reset();
++        __builtin_unreachable();
++    }
+     update_OS();
+         #if DEBUG
+         display_msg_to_screen(S("3"),0,0);
